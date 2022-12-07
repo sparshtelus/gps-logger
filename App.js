@@ -10,10 +10,10 @@ import * as TaskManager from 'expo-task-manager';
 import * as SQLite from 'expo-sqlite'
 
 
-const BACKGROUND_LOCATION_TASK = 'background-gps-record1';
+const BACKGROUND_LOCATION_TASK = 'background-gps-record6';
 
-const db = SQLite.openDatabase('db.testDb') // returns Database object
-// const db = SQLite.openDatabase('db.gpsLogs') // returns Database object
+// const db = SQLite.openDatabase('db.testDb') // returns Database object
+const db = SQLite.openDatabase('db.gpsLogs1') // returns Database object
 
 
 // 1. Define the task by providing a name and the function that should be executed
@@ -39,6 +39,13 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, ({ data, error }) => {
     const { locations } = data;
 
     console.log('received location', JSON.stringify(locations))
+    db.transaction(tx => {
+      tx.executeSql('INSERT INTO gpsdata (timestamp, latitude, longitude) values (?, ?, ?)', [locations[0].timestamp, locations[0].coords.latitude, locations[0].coords.longitude],
+      (txObj, resultSet) => 0,
+        // (txObj, resultSet) => setData([...data,
+        //     { id: resultSet.insertId, timestamp: resultSet.timestamp, latitude: resultSet.latitude, long: resultSet.longitude }]),
+        (txObj, error) => console.log('Error', error))
+    })
     // const db = SQLite.openDatabase('dbName', version);
 
     // do something with the locations captured in the background
@@ -53,12 +60,12 @@ async function registerBackgroundFetchAsync() {
   console.log('registering')
   await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
     accuracy: Location.Accuracy.Highest,
-      timeInterval: 2000,
+      timeInterval: 5000,
       distanceInterval: 0,
     
     
     // timeInterval: 5000,
-    // deferredUpdatesTimeout: 10000,
+    // deferredUpdatesTimeout: 5000,
     // distanceInterval: 0
     // deferredUpdatesInterval: 5000
   });
@@ -119,7 +126,7 @@ export default function App() {
   fetchDataFromDb = () => {
     db.transaction(tx => {
       // sending 4 arguments in executeSql
-      tx.executeSql('SELECT * FROM items', null, // passing sql query and parameters:null
+      tx.executeSql('SELECT * FROM gpsdata', null, // passing sql query and parameters:null
         // success callback which sends two things Transaction object and ResultSet Object
         (txObj, { rows: { _array } }) => setData(_array) ,
         // failure callback which sends two things Transaction object and Error
@@ -131,9 +138,9 @@ export default function App() {
   // event handler for new item creation
   insertItemIntoDb = () => {
     db.transaction(tx => {
-      tx.executeSql('INSERT INTO items (text, count) values (?, ?)', ['gibberish', 0],
+      tx.executeSql('INSERT INTO gpsdata (timestamp, latitude, longitude) values (?, ?, ?)', [1111, 10, 20],
         (txObj, resultSet) => setData([...data,
-            { id: resultSet.insertId, text: 'gibberish', count: 0 }]),
+            { id: resultSet.insertId, timestamp: resultSet.timestamp, latitude: resultSet.latitude, longitude: resultSet.longitude }]),
         (txObj, error) => console.log('Error', error))
     })
   }
@@ -158,12 +165,18 @@ export default function App() {
       setLocation(location);
 
       // Check if the items table exists if not create it
+      // db.transaction(tx => {
+      //   tx.executeSql(
+      //     'CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, count INT)'
+      //   )
+      // })
+      console.log('creating table')
       db.transaction(tx => {
         tx.executeSql(
-          'CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, count INT)'
+          'CREATE TABLE IF NOT EXISTS gpsdata (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INT, latitude DECIMAL, longitude DECIMAL)'
         )
       })
-
+      console.log('reading db')
       fetchDataFromDb();
 
     })();
@@ -227,12 +240,16 @@ export default function App() {
         title={isRecording ? 'Stop Recording' : 'Start Recording'}
         onPress={toggleFetchTask}
       />
+
       <Button title="Add new item" onPress={insertItemIntoDb}></Button>
-      <ScrollView >
+      <Button
+        title={'Refresh logs'}
+        onPress={fetchDataFromDb}
+      />
+      <ScrollView styles={{innerHeight: 100}}>
         { data && data.map((row, ind) => 
           <View key={ind}>
-            <Text>{row.id}</Text>
-            <Text>{row.text} - {row.count}</Text>
+            <Text>{row.id}: {row.timestamp} - {row.latitude}, {row.longitude} </Text>
           </View>
         )
         }
